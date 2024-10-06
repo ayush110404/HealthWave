@@ -1,67 +1,101 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions, SafeAreaView, ImageSourcePropType } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions, SafeAreaView, ImageSourcePropType, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AntDesign } from '@expo/vector-icons';
-import { useFonts, Poppins_700Bold, Poppins_400Regular, Poppins_300Light } from '@expo-google-fonts/poppins';
+import { AntDesign,Feather } from '@expo/vector-icons';
+import { useFonts, Poppins_700Bold, Poppins_600SemiBold, Poppins_400Regular, Poppins_300Light } from '@expo-google-fonts/poppins';
 import { Link } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 
 const { width, height } = Dimensions.get('window');
-const scale = width / 375; // 375 is a standard width for mobile designs
+const scale = width / 390;
+const normalize = (size: number) => Math.round(size * scale);
+const server_url = process.env.EXPO_PUBLIC_SERVER_URL;
 
-const normalize = (size:number) => {
-  const newSize = size * scale;
-  return Math.round(newSize);
+const getHeartRateStatus = (hr: number | null): string => {
+  if (hr === null) return 'Unknown';
+  if (hr < 60) return 'Low';
+  if (hr >= 60 && hr <= 100) return 'Normal';
+  return 'High';
 };
 
-const WellnessDashboard = () => {
+const Home = () => {
   const [fontsLoaded] = useFonts({
     Poppins_700Bold,
+    Poppins_600SemiBold,
     Poppins_400Regular,
     Poppins_300Light,
   });
+  const [peakTimes, setPeakTimes] = useState<number[]>([]);
+  const [averageHR, setAverageHR] = useState<number | null>(null);
+  const [recordingDate, setRecordingDate] = useState<string>('');
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  const fetchRecordings = useCallback(async () => {
+    try {
+      const pastRecordings = await AsyncStorage.getItem('recordings');
+      if (pastRecordings) {
+        const parsedRecordings = JSON.parse(pastRecordings);
+        if (parsedRecordings.length > 0) {
+          const recentRecording = parsedRecordings[parsedRecordings.length - 1];
+          setRecordingDate(recentRecording.date || 'Unknown date');
+          const audioUri = recentRecording.getURI;
+          const response = await FileSystem.uploadAsync(
+            server_url || '',
+            audioUri,
+          );
+          const data = JSON.parse(response.body);
+          if (data.result) {
+            setPeakTimes(data.result.peak_times);
+            setAverageHR(data.result.average_hr);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }, [server_url]);
+
+  useEffect(() => {
+    fetchRecordings();
+  }, [fetchRecordings]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchRecordings();
+    setRefreshing(false);
+  }, [fetchRecordings]);
 
   if (!fontsLoaded) {
     return null;
   }
 
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient colors={['#e8f5e9', '#c8e6c9']} style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
           <Text style={styles.question}>How are you feeling today?😊</Text>
 
           <View style={styles.physicalOverview}>
-            <Text style={styles.sectionTitle}>My Devices</Text>
+            <Text style={styles.sectionTitle}>Last Analysis</Text>
           </View>
 
-          <View style={styles.metricsContainer}>
-            <DeviceCard
-              icon={require('@/assets/images/icon4.png')}
-              title="Body Composition"
-              subtitle="Smart Scale Pro"
-              measurements={[
-                { value: '145', unit: 'lb', label: 'Weight' },
-                { value: '20.5', label: 'BMI' },
-                { value: '22.1', unit: '%', label: 'Body fat' },
-              ]}
-              date="Measured on Apr 29, 12:04 PM"
-            />
+          <AudioStatsCard
+            icon={require('@/assets/images/icon.png')}
+            title="Heart Rate Monitor"
+            subtitle={`Analyzed on ${recordingDate}`}
+            measurements={[
+              { value: averageHR !== null ? averageHR.toFixed(0) : '--', unit: 'BPM', label: 'Avg. Heart Rate' },
+              { value: peakTimes.length.toString(), label: 'Peaks Detected' },
+              { value: getHeartRateStatus(averageHR), label: 'Status' },
+            ]}
+            date={`View detailed report`}
+          />
 
-            <DeviceCard
-              icon={require('@/assets/images/icon4.png')}
-              title="Vital Signs"
-              subtitle="Health Monitor Plus"
-              measurements={[
-                { value: '98', unit: '%', label: 'Oxygen' },
-                { value: '85', unit: 'bpm', label: 'Pulse' },
-                { value: '120/80', unit: 'mmHg', label: 'BP' },
-              ]}
-              date="Measured on Apr 28, 7:03 PM"
-            />
-          </View>
-
-          <Link href={{pathname:'/audioRecord'}} style={styles.connectButton}>
-            <Text style={styles.connectButtonText}>Connect New Device</Text>
+          <Link href={{pathname:'/audioRecording'}} style={styles.connectButton}>
+            <Feather name="mic" size={normalize(22)} color="white" />
+            <Text style={styles.connectButtonText}> Record Heart Beat</Text>
           </Link>
         </ScrollView>
       </LinearGradient>
@@ -69,7 +103,13 @@ const WellnessDashboard = () => {
   );
 };
 
-const DeviceCard = ({ icon, title, subtitle, measurements, date }:{icon:ImageSourcePropType,title:string,subtitle:string,measurements:{value:string,unit?:string,label:string}[],date:string}) => (
+const AudioStatsCard = ({ icon, title, subtitle, measurements, date }: {
+  icon: ImageSourcePropType,
+  title: string,
+  subtitle: string,
+  measurements: { value: string, unit?: string, label: string }[],
+  date: string
+}) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
       <Image source={icon} style={styles.cardIcon} />
@@ -81,9 +121,12 @@ const DeviceCard = ({ icon, title, subtitle, measurements, date }:{icon:ImageSou
     <View style={styles.measurementsContainer}>
       {measurements.map((measurement, index) => (
         <View key={index} style={styles.measurement}>
-          <Text style={styles.measurementValue}>
+          <Text style={[
+            styles.measurementValue,
+            measurement.label === 'Status' && styles[`status${measurement.value as 'Low' | 'Normal' | 'High' | 'Unknown'}`]
+          ]}>
             {measurement.value}
-            <Text style={styles.measurementUnit}>{measurement.unit}</Text>
+            {measurement.unit && <Text style={styles.measurementUnit}>{measurement.unit}</Text>}
           </Text>
           <Text style={styles.measurementLabel}>{measurement.label}</Text>
         </View>
@@ -91,12 +134,13 @@ const DeviceCard = ({ icon, title, subtitle, measurements, date }:{icon:ImageSou
     </View>
     <View style={styles.cardFooter}>
       <Text style={styles.cardDate}>{date}</Text>
-      <TouchableOpacity>
+      <Link href={{pathname:'/recordingAnalysis'}}>
         <AntDesign name="rightcircle" size={normalize(24)} color="#4caf50" />
-      </TouchableOpacity>
+      </Link>
     </View>
   </View>
 );
+
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -159,7 +203,7 @@ const styles = StyleSheet.create({
   },
   cardSubtitle: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: normalize(14),
+    fontSize: normalize(13),
     color: '#4caf50',
   },
   measurementsContainer: {
@@ -200,7 +244,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#4caf50',
     borderRadius: normalize(25),
     padding: normalize(16),
-    alignItems: 'center',
     marginBottom: normalize(20),
   },
   connectButtonText: {
@@ -208,6 +251,31 @@ const styles = StyleSheet.create({
     fontSize: normalize(16),
     color: 'white',
   },
+  infoTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: normalize(18),
+    color: '#2e7d32',
+    marginBottom: normalize(12),
+  },
+  infoText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: normalize(16),
+    color: '#4caf50',
+    marginBottom: normalize(8),
+  },
+  
+  statusLow: {
+    color: '#2196F3',
+  },
+  statusNormal: {
+    color: '#4CAF50',
+  },
+  statusHigh: {
+    color: '#F44336',
+  },
+  statusUnknown: {
+    color: '#9E9E9E',
+  }
 });
 
-export default WellnessDashboard;
+export default Home;
