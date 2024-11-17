@@ -140,7 +140,39 @@ const RecordingAnalysis = () => {
       );
       console.log('Server response:', response);
 
-      const data = JSON.parse(response.body);
+      const data = JSON.parse(response.body);      const renderPitchVisualization = () => {
+        if (!pitchData || pitchData.length === 0) {
+          return null; // Handle empty pitchData
+        }
+      
+        const pathData = pitchData.reduce((acc, pitch, index) => {
+          const x = (index / pitchData.length) * GRAPH_WIDTH;
+          const y = (1 - pitch) * GRAPH_HEIGHT;
+          return `${acc} L ${x},${y}`;
+        }, `M 0,${GRAPH_HEIGHT}`);
+      
+        const peakLines = peakTimes.map((time, index) => {
+          const x = (time / duration) * GRAPH_WIDTH;
+          return (
+            <Line
+              key={index}
+              x1={x}
+              y1={0}
+              x2={x}
+              y2={GRAPH_HEIGHT}
+              stroke="red"
+              strokeWidth="2"
+            />
+          );
+        });
+      
+        return (
+          <Svg height={GRAPH_HEIGHT} width={GRAPH_WIDTH}>
+            <Path d={pathData} fill="none" stroke="black" strokeWidth="2" />
+            {peakLines}
+          </Svg>
+        );
+      };
       if (data.result) {
         setPitchData(data.result.pitch_data);
         setPeakTimes(data.result.peak_times);
