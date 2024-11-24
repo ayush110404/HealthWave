@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions, SafeAreaView, ImageSourcePropType, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AntDesign,Feather } from '@expo/vector-icons';
+import { AntDesign, Feather } from '@expo/vector-icons';
 import { useFonts, Poppins_700Bold, Poppins_600SemiBold, Poppins_400Regular, Poppins_300Light } from '@expo-google-fonts/poppins';
 import { Link } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
+import { savedRecording } from '@/lib/types/main';
 
 const { width, height } = Dimensions.get('window');
 const scale = width / 390;
@@ -19,6 +20,13 @@ const getHeartRateStatus = (hr: number | null): string => {
   return 'High';
 };
 
+interface RecordingHistoryProps {
+  recordingURI: string;
+  peakTimes: number[];
+  averageHR: number | null;
+  date: string; // Added date field
+}
+
 const Home = () => {
   const [fontsLoaded] = useFonts({
     Poppins_700Bold,
@@ -26,33 +34,51 @@ const Home = () => {
     Poppins_400Regular,
     Poppins_300Light,
   });
-  const [peakTimes, setPeakTimes] = useState<number[]>([]);
-  const [averageHR, setAverageHR] = useState<number | null>(null);
-  const [recordingDate, setRecordingDate] = useState<string>('');
+
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [pastRecordings, setPastRecordings] = useState<RecordingHistoryProps[]>([]);
 
   const fetchRecordings = useCallback(async () => {
     try {
-      const pastRecordings = await AsyncStorage.getItem('recordings');
-      if (pastRecordings) {
-        const parsedRecordings = JSON.parse(pastRecordings);
-        if (parsedRecordings.length > 0) {
-          const recentRecording = parsedRecordings[parsedRecordings.length - 1];
-          setRecordingDate(recentRecording.date || 'Unknown date');
-          const audioUri = recentRecording.getURI;
-          const response = await FileSystem.uploadAsync(
-            server_url || '',
-            audioUri,
-          );
-          const data = JSON.parse(response.body);
-          if (data.result) {
-            setPeakTimes(data.result.peak_times);
-            setAverageHR(data.result.average_hr);
+      const storedRecordings = await AsyncStorage.getItem('recordings');
+      const parsedRecordings: savedRecording[] = storedRecordings ? JSON.parse(storedRecordings) : [];
+      
+      // Clear previous recordings before fetching new ones
+      setPastRecordings([]);
+      
+      // Process only the last 3 recordings
+      const lastThreeRecordings = parsedRecordings.slice(-3).reverse();
+      
+      const processedRecordings = await Promise.all(
+        lastThreeRecordings.map(async (recording) => {
+          const audioUri = recording.getURI;
+          try {
+            const response = await FileSystem.uploadAsync(
+              server_url || '',
+              audioUri,
+            );
+            const data = JSON.parse(response.body);
+            if (data.result) {
+              return {
+                recordingURI: audioUri,
+                peakTimes: data.result.peak_times,
+                averageHR: data.result.average_hr,
+                date: recording.date || new Date().toISOString(), // Use recording date or current date
+              };
+            }
+          } catch (error) {
+            console.error('Error processing recording:', error);
           }
-        }
-      }
+          return null;
+        })
+      );
+
+      // Filter out any null results and update state
+      const validRecordings = processedRecordings.filter((rec): rec is RecordingHistoryProps => rec !== null);
+      setPastRecordings(validRecordings);
+      
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching recordings:', error);
     }
   }, [server_url]);
 
@@ -70,39 +96,60 @@ const Home = () => {
     return null;
   }
 
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient colors={['#e8f5e9', '#c8e6c9']} style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-          <Text style={styles.question}>How are you feeling today?😊</Text>
-
-          <View style={styles.physicalOverview}>
-            <Text style={styles.sectionTitle}>Last Analysis</Text>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.greeting}>Good {getTimeOfDay()}</Text>
+              <Text style={styles.question}>How are you feeling today?😊</Text>
+            </View>
           </View>
 
-          <AudioStatsCard
-            icon={require('@/assets/images/icon.png')}
-            title="Heart Rate Monitor"
-            subtitle={`Analyzed on ${recordingDate}`}
-            measurements={[
-              { value: averageHR !== null ? averageHR.toFixed(0) : '--', unit: 'BPM', label: 'Avg. Heart Rate' },
-              { value: peakTimes.length.toString(), label: 'Peaks Detected' },
-              { value: getHeartRateStatus(averageHR), label: 'Status' },
-            ]}
-            date={`View detailed report`}
-          />
+          <Text style={styles.sectionTitle}>Recent Recordings</Text>
+          <ScrollView 
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recentRecordingsContainer}
+          >
+            {pastRecordings.length === 0 ? (
+              <Text style={styles.noRecordingsText}>No recordings yet</Text>
+            ) : (
+              pastRecordings.map((recording) => (
+                <View key={recording.recordingURI} style={styles.cardWrapper}>
+                  <AudioStatsCard
+                    icon={require('@/assets/images/icon.png')}
+                    title="Heart Rate Analysis"
+                    subtitle={`Analyzed on ${new Date(recording.date).toLocaleDateString()}`}
+                    measurements={[
+                      { value: recording.averageHR !== null ? recording.averageHR.toFixed(0) : '--', unit: 'BPM', label: 'Avg. Heart Rate' },
+                      { value: recording.peakTimes.length.toString(), label: 'Peaks Detected' },
+                      { value: getHeartRateStatus(recording.averageHR), label: 'Status' },
+                    ]}
+                    date="View detailed report"
+                  />
+                </View>
+              ))
+            )}
+          </ScrollView>
 
           <Link href={{pathname:'/audioRecording'}} style={styles.connectButton}>
             <Feather name="mic" size={normalize(22)} color="white" />
             <Text style={styles.connectButtonText}> Record Heart Beat</Text>
+          </Link>
+          <Link href={{pathname:'/pastRecordings'}} style={styles.connectButton}>
+            <Feather name="mic" size={normalize(22)} color="white" />
+            <Text style={styles.connectButtonText}> Past Recordings</Text>
           </Link>
         </ScrollView>
       </LinearGradient>
     </SafeAreaView>
   );
 };
-
 const AudioStatsCard = ({ icon, title, subtitle, measurements, date }: {
   icon: ImageSourcePropType,
   title: string,
@@ -275,7 +322,68 @@ const styles = StyleSheet.create({
   },
   statusUnknown: {
     color: '#9E9E9E',
-  }
+  },
+  recentRecordingsContainer: {
+    paddingHorizontal: normalize(4),
+    paddingVertical: normalize(10),
+    flexDirection: 'row',
+  },
+  cardWrapper: {
+    width: width - normalize(70), // Adjust card width to be slightly less than screen width
+    marginRight: normalize(10),
+  },
+  noRecordingsText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: normalize(16),
+    color: '#4caf50',
+    textAlign: 'center',
+    width: '100%',
+    paddingVertical: normalize(20),
+  },
+  recentRecordings:{
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: normalize(20),
+    overflow:'scroll',
+    gap:normalize(20),
+    overflowY : 'scroll',
+    overflowX : 'scroll',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: normalize(24),
+  },
+  greeting: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: normalize(16),
+    color: '#4caf50',
+  },
+  profileButton: {
+    padding: normalize(8),
+  },
+  profileIcon: {
+    width: normalize(40),
+    height: normalize(40),
+    borderRadius: normalize(20),
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
 });
+
+const getTimeOfDay = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+};
 
 export default Home;
