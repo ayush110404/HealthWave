@@ -1,50 +1,93 @@
-# Welcome to your Expo app 👋
+# HealthWave 💓 - Heart Rate Monitoring Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Overview
 
-## Get started
+HealthWave is an innovative mobile application that allows users to record and analyze their heart rate using audio recordings. Leveraging advanced signal processing techniques, the app provides insights into your heart health and emotional state.
 
-1. Install dependencies
+## 🌟 Features
 
-   ```bash
-   npm install
-   ```
+- **Heart Rate Recording**: Capture your heart rate using audio input
+- **Real-time Analysis**: Instant processing of audio recordings
+- **Detailed Reports**: Comprehensive heart rate analysis and insights
+- **Recording History**: View and manage past recordings
+- **Emotional State Interpretation**: Get insights into your potential emotional state based on heart rate
 
-2. Start the app
+## 🛠 Tech Stack
 
-   ```bash
-    npx expo start
-   ```
+- **Frontend**: 
+  - React Native
+  - Expo
+  - TypeScript
+- **Key Libraries**:
+  - Expo Audio
+  - React Native Skia
+  - Async Storage
+  - Expo Router
 
-In the output, you'll find options to open the app in a
+## 📱 Supported Platforms
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- iOS
+- Android
+- Web
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🚀 Getting Started
 
-## Get a fresh project
+### Prerequisites
 
-When you're ready, run:
+- Node.js (v18+)
+- npm or yarn
+- Expo CLI
+- Smartphone or Emulator
 
-```bash
-npm run reset-project
+### Installation
+
+1. Clone the repository
+```
+bash
+git clone https://github.com/yourusername/healthwave.git
+cd healthwave
+ ```
+2. Install dependencies
+```
+bash
+npm install
+```
+3. Set up environment variables
+- Create a `.env` file
+- Add your backend server URL:
+``` EXPO_PUBLIC_SERVER_URL=https://your-backend-server-url ```
+4. Start the development server
+``` 
+bash
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
-## Learn more
+## 🔍 How It Works
 
-To learn more about developing your project with Expo, look at the following resources:
+1. Record Audio: Capture a short audio recording
+2. Upload to Backend: Send audio to signal processing server
+3. Analyze Heart Rate: Extract heart rate and peak information
+4. Generate Report: Display detailed heart rate insights
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
 
-## Join the community
+## 🤝 Backend Integration
 
-Join our community of developers creating universal apps.
+This frontend works with a separate backend service responsible for:
+- Audio signal processing
+- Heart rate extraction
+- Peak detection
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 🔒 Security
+
+- Secure audio processing
+- Local storage of recordings
+- No persistent personal health data
+
+## 🚧 Limitations
+
+- Requires quiet environment for accurate readings
+- Not a medical-grade diagnostic tool
+- Accuracy depends on recording quality
+
+
