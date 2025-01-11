@@ -77,6 +77,7 @@ This frontend works with a separate backend service responsible for:
 - Audio signal processing
 - Heart rate extraction
 - Peak detection
+Backend Repository: ```https://github.com/ayush110404/HealthWave-Server```
 
 ## 🔒 Security
 
